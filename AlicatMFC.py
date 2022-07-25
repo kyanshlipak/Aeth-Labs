@@ -23,15 +23,8 @@ def startTCP():
     global client_socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    #create a second socket for receiving flame sensor data from the rasberry pi
-    global recv_socket
-    recv_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    recv_socket.bind(('0.0.0.0',3401))
-    recv_socket.setblocking(0)
-    recv_socket.settimeout(0.2)
-
     #set socket to raspberry pi's ip address at a common port
-    ip = '192.168.7.163'
+    ip = '192.168.7.177'
     port = 3400
 
     #global socket address to use in other functions
@@ -44,9 +37,7 @@ def sendTCP(message):
 
 #end tcp socket at the end of the LabVIEW program to avoid future errors
 def endTCP():
-    sendTCP("end")
     client_socket.close()
-    recv_socket.close()
 
 #test tcp sending socket
 def testTCP():
@@ -70,11 +61,12 @@ def flameTCP(num):
 def testAeth():
     openAethPort("COM5")
     i = 0
-    while i<10:
+    while i<20:
         x = getMicroAethData()
         i+=1
         sleep(1)
         print(x)
+
     closeAethPort()
     
 #get MA350 data and export an array of necessary values to LabVIEW
@@ -93,8 +85,8 @@ def getMicroAethData():
     arr_aeth_data = received_data.split(',')
 
     #check that the serial data is actually the MA350 data we want
-    if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 50:
-        #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc
+    if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 70:
+        #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, humidity
         return [
             toFloat(arr_aeth_data[10]),
             toFloat(arr_aeth_data[16]),
@@ -108,10 +100,29 @@ def getMicroAethData():
             toFloat(arr_aeth_data[54]),
             toFloat(arr_aeth_data[55]),
             toFloat(arr_aeth_data[69]),
-            toFloat(arr_aeth_data[71])
+            toFloat(arr_aeth_data[71]),
+            0
+        ]
+    elif len(arr_aeth_data)>=50 and arr_aeth_data[2] == "2022" and arr_aeth_data[5] == "2022":
+        #if using PAX:
+        return [
+            0,
+            0,
+            0,
+            0,
+            toFloat(arr_aeth_data[24]),
+            0,
+            toFloat(arr_aeth_data[25]),
+            0,
+            0,
+            0,
+            0,
+            round(toFloat(arr_aeth_data[22])*1000,4),
+            round(toFloat(arr_aeth_data[22])*1000,5),
+            toFloat(arr_aeth_data[23]),
         ]
     else:
-        #so LabVIEW still receives an expected array of numbers
+        #so program still receives an expected array of numbers
         return [0]
 
 #initialize all three ports as global variables, keep open until end of labview program
@@ -180,6 +191,20 @@ def getFlowData():
 
 def closeFlowPort():
     flow_controller_1.close()
+
+def allFlow(port1,port2,port3):
+    flow_controller_1 = FlowController(port=port1)
+    flow_controller_2 = FlowController(port=port2)
+    flow_controller_3 = FlowController(port=port3)
+    for i in range(3):
+        print("1: " + flow_controller_1.get())
+        print("2: " + flow_controller_2.get())
+        print("3: " + flow_controller_3.get())
+        sleep(1)
+    flow_controller_1.close()
+    flow_controller_2.close()
+    flow_controller_3.close()
+
     
 def openAethPort(aeth_port):
     global aeth_ser
@@ -187,6 +212,30 @@ def openAethPort(aeth_port):
     
 def closeAethPort():
     aeth_ser.close()
+
+def startSerial():
+    global ser
+    ser = serial.Serial(
+        port = 'COM7',
+        baudrate = 115200,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        bytesize=serial.EIGHTBITS,
+        timeout=0.7
+    )
+
+def sendSerial(message):
+    ser.write(message.encode())
+
+def endSerial():
+    ser.close()
+
+def testSerial():
+    startSerial()
+    for i in range(10):
+        sendSerial("1open0.5")
+        time.sleep(1)
+    endSerial()
 
 #check that a port exists
 def checkPort(COMport):
@@ -203,12 +252,10 @@ def ewm(array, comNumber):
 
 #test that mfc data is being read
 def testMFC():
-    openPort("COM3","COM4","COM5")
+    openPorts("COM3","COM4","COM5")
     for i in range(1,20):
-        print(getMFCData(0,2))
+        print(getMFCData(1))
+        print(getMFCData(2))
         sleep(0.5)
     closePorts()
-
-
-
 
