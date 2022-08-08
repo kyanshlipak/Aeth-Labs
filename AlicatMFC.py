@@ -72,59 +72,64 @@ def testAeth():
 #get MA350 data and export an array of necessary values to LabVIEW
 def getMicroAethData():
     #read first byte
+
     received_data = aeth_ser.read()
-    sleep(0.01)
+    sleep(0.04)
 
     #number of bytes left in the bffer
     data_left = aeth_ser.inWaiting()
-
     #add left over bytes and decode into a string
-    received_data = (received_data+ aeth_ser.read(data_left)).decode()
+    try:
+        received_data = (received_data+ aeth_ser.read(data_left)).decode()
 
-    #split the received data into na array
-    arr_aeth_data = received_data.split(',')
+        #split the received data into na array
+        arr_aeth_data = received_data.split(',')
 
-    #check that the serial data is actually the MA350 data we want
-    if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 70:
-        #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, humidity
-        return [
-            toFloat(arr_aeth_data[10]),
-            toFloat(arr_aeth_data[16]),
-            toFloat(arr_aeth_data[17]),
-            toFloat(arr_aeth_data[18]),
-            toFloat(arr_aeth_data[21]),
-            toFloat(arr_aeth_data[22]),
-            toFloat(arr_aeth_data[23]),
-            toFloat(arr_aeth_data[30]),
-            toFloat(arr_aeth_data[31]),
-            toFloat(arr_aeth_data[54]),
-            toFloat(arr_aeth_data[55]),
-            toFloat(arr_aeth_data[69]),
-            toFloat(arr_aeth_data[71]),
-            0
-        ]
-    elif len(arr_aeth_data)>=50 and arr_aeth_data[2] == "2022" and arr_aeth_data[5] == "2022":
-        #if using PAX:
-        return [
-            0,
-            0,
-            0,
-            0,
-            toFloat(arr_aeth_data[24]),
-            0,
-            toFloat(arr_aeth_data[25]),
-            0,
-            0,
-            0,
-            0,
-            round(toFloat(arr_aeth_data[22])*1000,4),
-            round(toFloat(arr_aeth_data[22])*1000,5),
-            toFloat(arr_aeth_data[23]),
-        ]
-    else:
-        #so program still receives an expected array of numbers
+        #check that the serial data is actually the MA350 data we want
+        if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 70:
+            #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, humidity
+            return [
+                toFloat(arr_aeth_data[10]),
+                toFloat(arr_aeth_data[16]),
+                toFloat(arr_aeth_data[17]),
+                toFloat(arr_aeth_data[18]),
+                toFloat(arr_aeth_data[21]),
+                toFloat(arr_aeth_data[22]),
+                toFloat(arr_aeth_data[23]),
+                toFloat(arr_aeth_data[30]),
+                toFloat(arr_aeth_data[31]),
+                toFloat(arr_aeth_data[54]),
+                toFloat(arr_aeth_data[55]),
+                toFloat(arr_aeth_data[69]),
+                toFloat(arr_aeth_data[71]),
+                0
+            ]
+        elif len(arr_aeth_data)>=50 and arr_aeth_data[2] == "2022" and arr_aeth_data[5] == "2022":
+            #if using PAX:
+            return [
+                0,
+                0,
+                0,
+                0,
+                toFloat(arr_aeth_data[24]),
+                0,
+                toFloat(arr_aeth_data[25]),
+                0,
+                0,
+                0,
+                0,
+                round(toFloat(arr_aeth_data[22])*1000,4),
+                round(toFloat(arr_aeth_data[22])*1000,5),
+                toFloat(arr_aeth_data[23]),
+            ]
+        else:
+            #so program still receives an expected array of numbers
+            return [0]
+    except UnicodeDecodeError:
+        received_data = (received_data+ aeth_ser.read(data_left))
+        print(received_data)
         return [0]
-
+    
 #initialize all three ports as global variables, keep open until end of labview program
 def openPorts(COMport1, COMport2, aeth_port):
     global flow_controller_1
@@ -206,9 +211,9 @@ def allFlow(port1,port2,port3):
     flow_controller_3.close()
 
     
-def openAethPort(aeth_port):
+def openAethPort(aeth_port,baudrate):
     global aeth_ser
-    aeth_ser = serial.Serial(aeth_port,115200,timeout=0.1)
+    aeth_ser = serial.Serial(aeth_port,baudrate,timeout=0.1)
     
 def closeAethPort():
     aeth_ser.close()
