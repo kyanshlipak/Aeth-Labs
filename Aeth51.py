@@ -35,17 +35,40 @@ def getMicroAethData():
 
     #split the received data into na array
     arr_aeth_data = received_data.split(',')
-
+    
 def hexStringToInt(byte):
     return int.from_bytes(byte,"big")
 
+def hexStreaming(bytes1):
+    if hexStringToInt(bytes1) == 66:
+        return "Flash & streaming"
+    elif hexStringToInt(bytes1) == 70:
+        return "Flash only"
+    
+def hexSound(bytes1):
+    if hexStringToInt(bytes1) == 100:
+        return "On"
+    elif hexStringToInt(bytes1) == 0:
+        return "Off"
+    
+def hexSessions(bytes2):
+    return bytes2[1]
+    
+def hexShutdown(bytes1):
+    if bytes1 == b'S': #S
+        return "simple"
+    if bytes1 == b'N': #N:
+        return "normal"
+    if bytes1 == b'U': #U
+        return "disabled"
+    
 def hexDate(bytes3):
     year = bytes3[0] + 2000
     month  = bytes3[1]
     day = bytes3[2]
     if len(bytes3) > 3:
         dayOfWeek = bytes3[3]
-    datestring = str(year) + '/' + str(month) + '/' + str(day)
+    datestring = str(month) + '/' + str(day) + '/' + str(year) 
     return(datestring)
 
 def addZero(num):
@@ -63,8 +86,14 @@ def hexTime(bytes3):
     timestring = addZero(hours) + ':' + addZero(minutes) + ':' + addZero(seconds)
     return timestring
 
+def hexPower(bytes1):
+    if bytes1 == b'\x00':
+        return "on"
+    else:
+        return "off"
+
 def hexFlow(bytes1):
-    flow = bytes1*25
+    flow = hexStringToInt(bytes1)*25
     return str(flow) + 'mlpm'
 
 def hexFlow2(bytes2):
@@ -85,7 +114,7 @@ def hexBattery(bytes2):
     return str(battery) + "%"
 
 def streamToDict(stream):
-    if stream[2:8] == b'AE5X:M':
+    if stream[2:8] == b'AE5X:M'  and len(stream) > 20:
         print(stream)
         print("length: ",len(stream[8:-1]))
         stream = stream[8:-1]
@@ -101,10 +130,13 @@ def streamToDict(stream):
             'battery':hexBattery(stream[19:21]),
             'CRC':stream[-1]
         }
-        print(streamDict)
+        return streamDict
     else:
         print(stream)
 
+def flush():
+    aeth_ser.flush()
+        
 def getCheckSum(data):
     length = len(data)
     checksum = length ^ data[0]
@@ -119,7 +151,7 @@ def write(data):
     aeth_ser.write(message)
 
 def getResponse():
-    while True:
+    for i in range(5):
         data = aeth_ser.read()
         time.sleep(0.1)
         data_left = aeth_ser.inWaiting()
