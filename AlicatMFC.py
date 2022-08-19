@@ -1,7 +1,6 @@
 import serial
 import alicat
 import os
-import socket
 from time import sleep
 import time
 from alicat import FlowController
@@ -17,57 +16,6 @@ def toFloat(string):
     except TypeError and ValueError:
         return 0
 
-#start tcp socket to send data to the raspberry pi
-def startTCP():
-    #creates global client socket variable
-    global client_socket
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    #set socket to raspberry pi's ip address at a common port
-    ip = '192.168.7.177'
-    port = 3400
-
-    #global socket address to use in other functions
-    global address
-    address = (ip,port)
-
-#send data over tcp socket
-def sendTCP(message):
-    client_socket.sendto(message.encode(), address)
-
-#end tcp socket at the end of the LabVIEW program to avoid future errors
-def endTCP():
-    client_socket.close()
-
-#test tcp sending socket
-def testTCP():
-    startTCP()
-    for i in range(1,20):
-        print("testing")
-        sendTCP("testing: " + str(i))
-        sleep(0.5)
-    endTCP()
-
-#send a request for data to the raspberry pi and then try to decode received data
-def flameTCP(num):
-    sendTCP("flame" + str(num))
-    try:
-        flame_data, ad = recv_socket.recvfrom(16)
-        return(int(flame_data.decode()))
-    except Exception as e:
-        return(1)
-    
-#micro aeth serial testing
-def testAeth():
-    openAethPort("COM5")
-    i = 0
-    while i<20:
-        x = getMicroAethData()
-        i+=1
-        sleep(1)
-        print(x)
-
-    closeAethPort()
     
 #get MA350 data and export an array of necessary values to LabVIEW
 def getMicroAethData():
@@ -87,7 +35,7 @@ def getMicroAethData():
 
         #check that the serial data is actually the MA350 data we want
         if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 70:
-            #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, humidity
+            #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, mode
             return [
                 toFloat(arr_aeth_data[10]),
                 toFloat(arr_aeth_data[16]),
@@ -112,7 +60,7 @@ def getMicroAethData():
                 0,
                 0,
                 toFloat(arr_aeth_data[24]),
-                0,
+                toFloat(arr_aeth_data[23]),
                 toFloat(arr_aeth_data[25]),
                 0,
                 0,
@@ -120,7 +68,7 @@ def getMicroAethData():
                 0,
                 round(toFloat(arr_aeth_data[22])*1000,4),
                 round(toFloat(arr_aeth_data[22])*1000,5),
-                toFloat(arr_aeth_data[23]),
+                toFloat(arr_aeth_data[51]),
             ]
         else:
             #so program still receives an expected array of numbers
@@ -197,20 +145,6 @@ def getFlowData():
 def closeFlowPort():
     flow_controller_1.close()
 
-def allFlow(port1,port2,port3):
-    flow_controller_1 = FlowController(port=port1)
-    flow_controller_2 = FlowController(port=port2)
-    flow_controller_3 = FlowController(port=port3)
-    for i in range(3):
-        print("1: " + flow_controller_1.get())
-        print("2: " + flow_controller_2.get())
-        print("3: " + flow_controller_3.get())
-        sleep(1)
-    flow_controller_1.close()
-    flow_controller_2.close()
-    flow_controller_3.close()
-
-    
 def openAethPort(aeth_port,baudrate):
     global aeth_ser
     aeth_ser = serial.Serial(aeth_port,baudrate,timeout=0.1)
@@ -218,10 +152,10 @@ def openAethPort(aeth_port,baudrate):
 def closeAethPort():
     aeth_ser.close()
 
-def startSerial():
+def startSerial(portName):
     global ser
     ser = serial.Serial(
-        port = 'COM7',
+        port = portName,
         baudrate = 115200,
         parity=serial.PARITY_NONE,
         stopbits=serial.STOPBITS_ONE,
@@ -255,12 +189,162 @@ def ewm(array, comNumber):
     last = len(array)-1
     return(meanie['Bc'][last])    
 
-#test that mfc data is being read
-def testMFC():
-    openPorts("COM3","COM4","COM5")
-    for i in range(1,20):
-        print(getMFCData(1))
-        print(getMFCData(2))
-        sleep(0.5)
-    closePorts()
+def testPAXConnection(PAXport):
+    openAethPort(PAXport,115200)
+    real = False
+    startTime = time.time()
+    while time.time() - startTime < 2:
+        data = getMicroAethData()
+        real = real or data != [0]
+        print(data)
+    closeAethPort()
+    if real:
+        return "PAX connection functional"
+    else:
+        return "PAX connection failed. Check RS232 cord."
 
+def testMFCConnection(port1, port2):
+    try:
+        global flow_controller_1
+        flow_controller_1 = FlowController(port=port1)
+        global flow_controller_2
+        flow_controller_2 = FlowController(port=port2)
+    except Exception as e:
+        flow_controller_1.close()
+        flow_controller_2.close()
+        return "Access denied to flow controller serial ports. Check for programs currently using them."
+    try:
+        data = flow_controller_1.get()
+    except Exception as e:
+        print(e)
+        flow_controller_1.close()
+        flow_controller_2.close()
+        return "Check cable connection to flow controller 1, and ensure the flow controller is powered on."
+    try:
+        data = flow_controller_2.get()
+    except Exception as e:
+        print(e)
+        flow_controller_1.close()
+        flow_controller_2.close()
+        return "Check cable connection to flow controller 2, and ensure the flow controller is powered on."
+    flow_controller_1.close()
+    flow_controller_2.close()
+    return "Flow controller communication functional :) "
+
+
+def testSerialConnection(raspberryPort):
+    try:
+        startSerial(raspberryPort)
+    except Exception as e:
+        print(e)
+        return "Check if USB to UART bridge is plugged in"
+
+    sendSerial("testing")
+    received_data = ser.read()
+    sleep(0.04)
+    
+    #number of bytes left in the bffer
+    data_left = ser.inWaiting()
+    
+    #add left over bytes and decode into a string
+    received_data = (received_data+ ser.read(data_left)).decode()
+    if received_data == "communication confirmed":
+        ser.close()
+        return "raspberry pi serial communication functional"
+    else:
+        ser.close()
+        return "check that raspberry pi is on and running"
+    ser.close()
+    
+def testSolenoid(raspberryPort):
+    startSerial(raspberryPort)
+    print("listen for the solenoid pinch valve")
+    time.sleep(1)
+    sendSerial("1open1.0")
+    check = input("Hear the solenoid pulse? (y/n)")
+    if check.lower() == "y" or check.lower() == "yes":
+        ser.close()
+        return "solenoid communcation functional"
+    else:
+        print("watch the relay light")
+        time.sleep(1)
+        sendSerial("1open1.0")
+        relay = input("Did you see it turn on? (y/n)")
+        ser.close()
+        if relay.lower() == "y" or relay.lower() == "yes":
+            return "check wiring from relay to solenoid and power supply"
+        else:
+            return "check wiring from relay to pi"
+
+def testBallValves(raspberryPort):
+    startSerial(raspberryPort)
+    print("listen for the ball valves")
+    time.sleep(1)
+    sendSerial("soot")
+    time.sleep(5)
+    sendSerial("air")
+    time.sleep(2)
+    check = input("Hear the ball valves move? (y/n)")
+    if check.lower() == "y" or check.lower() == "yes":
+        ser.close()
+        return "ball valve communcation functional"
+    else:
+        print("watch the relay light")
+        time.sleep(1)
+        sendSerial("soot")
+        time.sleep(5)
+        sendSerial("air")
+        time.sleep(2)
+        relay = input("Did you see it turn on? (y/n)")
+        ser.close()
+        if relay.lower() == "y" or relay.lower() == "yes":
+            return "check wiring from relay to ball valves and power supply"
+        else:
+            return "check wiring from relay to pi"
+
+def testAirFlow(port1):
+    global flow_controller_1
+    flow_controller_1 = FlowController(port=port1)
+    setSetPoint(1, 7.0)
+    time.sleep(2)
+    flow = flow_controller_1.get()["mass_flow"]
+    setSetPoint(1,0.0)
+    flow_controller_1.close()
+    if flow > 6.8:
+        return "air compressor connection functional"
+    if flow < 1:
+        return "Check air compressor connection"
+    else:
+        return "Check air compressor pressure setting"
+
+def testPropaneFlow(port2):
+    global flow_controller_2
+    flow_controller_2 = FlowController(port=port2)
+    setSetPoint(2, 0.03)
+    time.sleep(4)
+    flow = flow_controller_2.get()["mass_flow"]
+    setSetPoint(2,0.0)
+    flow_controller_2.close()
+    if flow > 0.025:
+        return "propane connection functional"
+    if flow < 0.01:
+        return "Check propane connection"
+    else:
+        return "Check propane regulator setting"
+
+def debugloop(function):
+    while True:
+        time.sleep(1)
+        x = function
+        print(x)
+        if "functional" in x:
+            break
+
+def debuggingSetup(port1, port2, PAXport, raspberryPort):
+     debugloop(testPAXConnection(PAXport))
+     debugloop(testMFCConnection(port1,port2))
+     debugloop(testSerialConnection(raspberryPort))
+     debugloop(testSolenoid(raspberryPort))
+     debugloop(testBallValves(raspberryPort))
+     debugloop(testAirFlow(port1))
+     debugloop(testPropaneFlow(port2))
