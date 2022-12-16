@@ -5,11 +5,13 @@ from scipy.signal import argrelextrema
 import scipy.optimize
 from scipy.signal import find_peaks
 from scipy.signal import savgol_filter
+import pathlib
+dirpath = str(pathlib.Path().resolve())
 
 #create dataframe where each row is a saved panda dataframe. This allows the program to apply filters to all the saved files
 def addFileToDF(fileName,df1,df2):
     #get the keywords from the filename and store as 'items'
-    fileName = fileName.replace('C:\\Users\\Kyan Shlipak\\Documents\\Solenoid Pulse DataFrames\\ ','',1)
+    fileName = fileName.replace(dirpath + '\\Solenoid Pulse DataFrames\\ ','',1)
     fileName = fileName.replace('.pkl','',1)    
     items = fileName.split(' ')
     
@@ -36,11 +38,11 @@ def addFileToDF(fileName,df1,df2):
 
 #convert a row from dfpulsefiles to the corresponding file path
 def pulseToFilePath(series):
-    return f'C:\\Users\\Kyan Shlipak\\Documents\\Solenoid Pulse DataFrames\\ {series["type"]} {series["date"]} {series["time"]} {str(series["df_runtime"])} {str(series["pulse_duration"])} {str(series["starting_sample_temp"])} {str(series["starting_ewm"])} {str(series["peak"])} {str(series["air_setpoint"])} {str(series["propane_setpoint"])} {str(series["sampling_flow"])}.pkl'
+    return dirpath + f'\\Solenoid Pulse DataFrames\\ {series["type"]} {series["date"]} {series["time"]} {str(series["df_runtime"])} {str(series["pulse_duration"])} {str(series["starting_sample_temp"])} {str(series["starting_ewm"])} {str(series["peak"])} {str(series["air_setpoint"])} {str(series["propane_setpoint"])} {str(series["sampling_flow"])}.pkl'
 
 #convert a row from dfflushfiles to the corresponding file path
 def flushToFilePath(series):
-     return f'C:\\Users\\Kyan Shlipak\\Documents\\Solenoid Pulse DataFrames\\ {series["type"]} {series["date"]} {series["time"]} {str(series["df_runtime"])} {str(series["flush_duration"])} {str(series["starting_sample_temp"])} {str(series["starting_ewm"])} {str(series["low"])} {str(series["air_setpoint"])} {str(series["propane_setpoint"])} {str(series["sampling_flow"])}.pkl'
+     return dirpath +  f'\\Solenoid Pulse DataFrames\\ {series["type"]} {series["date"]} {series["time"]} {str(series["df_runtime"])} {str(series["flush_duration"])} {str(series["starting_sample_temp"])} {str(series["starting_ewm"])} {str(series["low"])} {str(series["air_setpoint"])} {str(series["propane_setpoint"])} {str(series["sampling_flow"])}.pkl'
         
 
 #convert from filepath to dataframe
@@ -170,10 +172,10 @@ def plotFlushSamePlot(axis, pullRate,paths):
 
         axis.set_ylim([0,maxval+4000])
         return flushLineBestFit(axis, plots)
-    return [0,0]
+    return [20000,0.002] #return standard values if errors cause no value
 
 #characterize peaks from pulse plots
-def getPeaks(yhat, estimatedLag):
+def getPeaks(yhat, estimatedLag,mindex):
     #find initial peaks
     peaks,t = find_peaks(yhat[:(270+estimatedLag)], distance=60)
     realPeaks = []
@@ -182,7 +184,7 @@ def getPeaks(yhat, estimatedLag):
     ipeaks = []
     for i in range(len(peaks)):
         #only take peaks within acceptable range (not to much before or after the pulse)
-        if peaks[i] > (95+estimatedLag) and peaks[i] < 230+estimatedLag:
+        if peaks[i] > mindex and peaks[i] < 230+estimatedLag:
             ipeaks.append(peaks[i])
             
         #if there are multiple peaks, take the higest one
@@ -203,7 +205,7 @@ def plotPulseSamePlot(axis, pullRate, maxlines, paths, estimatedLag):
     sums = [] #areas under curves
     for path in range(len(newpaths)): #iterate through each path
         bccvals = getDF(newpaths[path])["bcc ewm"].to_numpy() #bcc exponentially weighted mean
-        fileName = newpaths[path].replace('C:\\Users\\Kyan Shlipak\\Documents\\Solenoid Pulse DataFrames\\ ','',1)
+        fileName = newpaths[path].replace(dirpath + '\\Solenoid Pulse DataFrames\\ ','',1)
         fileName = fileName.replace('.pkl','',1)    
         items = fileName.split(' ')
         if len(bccvals) >= 400: #make sure the length is at least 400 so can use for charaacterization
@@ -211,29 +213,40 @@ def plotPulseSamePlot(axis, pullRate, maxlines, paths, estimatedLag):
 
             #have them all start at the same y 
             #starty = yhat[0]
-            minima = argrelextrema(yhat[0:(120+estimatedLag)], np.less) #get x coords of local minima
-            minimay = yhat[0:(120+estimatedLag)][argrelextrema(yhat[0:(120+estimatedLag)], np.less)] #get y vals of local minima
+            minima = argrelextrema(yhat[0:(135+estimatedLag)], np.less) #get x coords of local minima
+            minimay = yhat[0:(135+estimatedLag)][argrelextrema(yhat[0:(135+estimatedLag)], np.less)] #get y vals of local minima
+            if len(minimay) == 0:
+                minima = [[100+estimatedLag]]
+                minimay = [yhat[100+estimatedLag]]
+            minimaIndex = minima[0][np.where(minimay == min(minimay))[-1][-1]] #get index of lowest minima of the minima
+                
             for i in range(len(yhat)):
                 #have the plots all start at the same y value (the value of each of their minima)
                 yhat[i] = yhat[i] - minimay[-1]
                 bccvals[i] = bccvals[i] -  minimay[-1]
             
             #get x coord of peak
-            peaks = getPeaks(yhat,estimatedLag)
+            peaks = getPeaks(yhat,estimatedLag,minimaIndex)
             if len(peaks)>0:
                 axis.plot(peaks[0], yhat[peaks[0]], "o",color ="blue") #plot where the peak is
             else:
-                peaks = [max(yhat)]
+                peaks = [np.where( yhat == max(yhat[140:399]) )[-1][-1] ]
+                axis.plot(peaks[0],yhat[peaks[0]],"o",color = "blue")
             
             #plot line of best fit for the 100 seconds before the pule
-            xfit = list(range((120+estimatedLag)))
-            m,b = np.polyfit(xfit,yhat[:(120+estimatedLag)],1)
+            xfit = list(range((135+estimatedLag)))
+            m,b = np.polyfit(xfit,yhat[:(135+estimatedLag)],1)
             yfit = list((val*m+b) for val in xfit)
             #ax3.plot(xfit,yfit,color = colors[path%len(colors)])
+
+                        #starty = yhat[0]
+            minima = argrelextrema(yhat[0:(135+estimatedLag)], np.less) #get x coords of local minima
+            minimay = yhat[0:(135+estimatedLag)][argrelextrema(yhat[0:(135+estimatedLag)], np.less)] #get y vals of local minima
+            if len(minimay) == 0:
+                minima = [[100]]
+                minimay = [yhat[100]]
+
             
-            #find and plot minima
-            minima = argrelextrema(yhat[0:(120+estimatedLag)], np.less)
-            minimay = yhat[0:(120+estimatedLag)][argrelextrema(yhat[0:(120+estimatedLag)], np.less)]
             minimaIndex = minima[0][np.where(minimay == min(minimay))[-1][-1]] #get index of lowest minima of the minima
             minimaValue =  min(minimay) #get lowest minima
             
@@ -254,6 +267,7 @@ def plotPulseSamePlot(axis, pullRate, maxlines, paths, estimatedLag):
             Sum = 0
             for i in range(minimaIndex,xstop):
                 Sum += yhat[i]
+            Sum = abs(Sum)
             sums.append(Sum)
             
             #add jump to list of jumps

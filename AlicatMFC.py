@@ -34,7 +34,7 @@ def getMicroAethData():
         arr_aeth_data = received_data.split(',')
 
         #check that the serial data is actually the MA350 data we want
-        if arr_aeth_data[0][0:5] == "MA350" and len(arr_aeth_data) >= 70:
+        if arr_aeth_data[0][0:2] == "MA" and len(arr_aeth_data) >= 70:
             #timebase, tape position, flow setpoint, flow total, sample temp, sample rh, sample dewpoit, uv atn1, uv atn2, ir atn1, ir atn2, ir bc1, ir bcc, mode
             return [
                 toFloat(arr_aeth_data[10]),
@@ -79,11 +79,13 @@ def getMicroAethData():
         return [0]
     
 #initialize all three ports as global variables, keep open until end of labview program
-def openPorts(COMport1, COMport2, aeth_port):
+def openPorts(COMport1, COMport2, COMport3, aeth_port):
     global flow_controller_1
     flow_controller_1 = FlowController(port=COMport1)
     global flow_controller_2
     flow_controller_2 = FlowController(port=COMport2)
+    global flow_controller_3
+    flow_controller_3 = FlowController(port=COMport3)
     global aeth_ser
     aeth_ser = serial.Serial(aeth_port,115200,timeout=0.1)
 
@@ -91,6 +93,7 @@ def openPorts(COMport1, COMport2, aeth_port):
 def closePorts():
     flow_controller_1.close()
     flow_controller_2.close()
+    flow_controller_3.close()
     aeth_ser.close()
 
 #use the alicat library to return an array of data from either mass flow controller and set the setpoint
@@ -119,6 +122,17 @@ def getMFCData(number):
             dictData["setpoint"]
             
         ]
+        
+    elif number ==3:
+        dictData = flow_controller_3.get()
+        arrData = [
+            dictData["pressure"],
+            dictData["temperature"],
+            abs(dictData["volumetric_flow"]),
+            abs(dictData["mass_flow"]),
+            dictData["setpoint"]
+            
+        ]
     return(arrData)
 
 def setSetPoint(number,setpoint):
@@ -126,6 +140,8 @@ def setSetPoint(number,setpoint):
         flow_controller_1.set_flow_rate(setpoint)
     elif (number == 2):
         flow_controller_2.set_flow_rate(setpoint)
+    elif (number == 3):
+        flow_controller_3.set_flow_rate(setpoint)
         
 def testFlowData(flowPort):
     global flow_controller_1
@@ -193,40 +209,57 @@ def testPAXConnection(PAXport):
     openAethPort(PAXport,115200)
     real = False
     startTime = time.time()
-    while time.time() - startTime < 2:
+    while time.time() - startTime < 5:
         data = getMicroAethData()
         real = real or data != [0]
-        print(data)
+        #print(data)
     closeAethPort()
     if real:
         return "PAX connection functional"
     else:
         return "PAX connection failed. Check RS232 cord."
 
-def testMFCConnection(port1, port2):
+def testMFCConnection(port1, port2, port3):
     try:
         global flow_controller_1
         flow_controller_1 = FlowController(port=port1)
         global flow_controller_2
         flow_controller_2 = FlowController(port=port2)
+        global flow_controller_3
+        flow_controller_3 = FlowController(port=port3)
     except Exception as e:
         flow_controller_1.close()
         flow_controller_2.close()
+        flow_controller_3.close()
         return "Access denied to flow controller serial ports. Check for programs currently using them."
+    
     try:
         data = flow_controller_1.get()
     except Exception as e:
         print(e)
         flow_controller_1.close()
         flow_controller_2.close()
-        return "Check cable connection to flow controller 1, and ensure the flow controller is powered on."
+        flow_controller_3.close()
+        return "Check cable connection to flow controller 1 (air), and ensure the flow controller is powered on."
+    
     try:
         data = flow_controller_2.get()
     except Exception as e:
         print(e)
         flow_controller_1.close()
         flow_controller_2.close()
-        return "Check cable connection to flow controller 2, and ensure the flow controller is powered on."
+        flow_controller_3.close()
+        return "Check cable connection to flow controller 2 (propane), and ensure the flow controller is powered on."
+    
+    try:
+        data = flow_controller_3.get()
+    except Exception as e:
+        print(e)
+        flow_controller_1.close()
+        flow_controller_2.close()
+        flow_controller_3.close()
+        return "Check cable connection to flow controller 3 (PAX dilution), and ensure the flow controller is powered on."
+    
     flow_controller_1.close()
     flow_controller_2.close()
     return "Flow controller communication functional :) "
@@ -340,9 +373,9 @@ def debugloop(function):
         if "functional" in x:
             break
 
-def debuggingSetup(port1, port2, PAXport, raspberryPort):
+def debuggingSetup(port1, port2, port3, PAXport, raspberryPort):
      debugloop(testPAXConnection(PAXport))
-     debugloop(testMFCConnection(port1,port2))
+     debugloop(testMFCConnection(port1,port2,port3))
      debugloop(testSerialConnection(raspberryPort))
      debugloop(testSolenoid(raspberryPort))
      debugloop(testBallValves(raspberryPort))
