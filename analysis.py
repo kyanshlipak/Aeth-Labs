@@ -128,19 +128,21 @@ def plotFlushSamePlot(axis, pullRate,paths):
     #maximum value in all of the flush plots, use to set ylimit
     maxval = 0
     
-    #2d list of bcc vals
+    #2d list of smoothed bcc vals
     bccAll = []
     for i in range(len(paths)):
         fileName = paths[i].replace('C:\\Users\\Kyan Shlipak\\Documents\\Solenoid Pulse DataFrames\\ ','',1)
         fileName = fileName.replace('.pkl','',1)    
         items = fileName.split(' ')
-        #
+    
         #if the df has the same pulling flow rate, add it to bccAll
         if int(float(items[-1])) == pullRate:
             bccAll.append(getDF(paths[i])["bcc ewm"].to_numpy())
+            
+            #get max value
             if max(getDF(paths[i])["bcc ewm"].to_numpy()) > maxval: maxval = max(getDF(paths[i])["bcc ewm"].to_numpy())
     
-    if len(bccAll) > 1: #if there are matching files
+    if len(bccAll) >= 1: #if there is at least one matching file
 
         #2d array of the x and smoothed y vals for ecah plot
         plots = []
@@ -148,6 +150,7 @@ def plotFlushSamePlot(axis, pullRate,paths):
         #fitted exponential decay curve for each plot
         ys = []
 
+        #iterate through each list of smoothed flush bcc values 
         for bccvals in bccAll:
             yhat = savgol_filter(bccvals, 70, 4) #savgol list
             [m,T] = fit(axis, range(len(yhat)),yhat,(40000,0.01),False) #variables for fit
