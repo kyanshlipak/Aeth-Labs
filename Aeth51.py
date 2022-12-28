@@ -20,7 +20,7 @@ def testAeth():
 
     closeAethPort()
     
-#get MA350 data and export an array of necessary values to LabVIEW
+#get AE data and export an array of necessary values to LabVIEW
 def getMicroAethData():
     #read first byte
 
@@ -36,24 +36,29 @@ def getMicroAethData():
     #split the received data into na array
     arr_aeth_data = received_data.split(',')
     
+#convert hex string of characters to corresponding integer
 def hexStringToInt(byte):
     return int.from_bytes(byte,"big")
 
+#get streaming setting
 def hexStreaming(bytes1):
     if hexStringToInt(bytes1) == 66:
         return "Flash & streaming"
     elif hexStringToInt(bytes1) == 70:
         return "Flash only"
     
+#get sound setting
 def hexSound(bytes1):
     if hexStringToInt(bytes1) == 100:
         return "On"
     elif hexStringToInt(bytes1) == 0:
         return "Off"
     
+#get number of sessions
 def hexSessions(bytes2):
     return bytes2[1]
     
+#get shutdown setting
 def hexShutdown(bytes1):
     if bytes1 == b'S': #S
         return "simple"
@@ -62,6 +67,7 @@ def hexShutdown(bytes1):
     if bytes1 == b'U': #U
         return "disabled"
     
+#get date from three bytes by converting each one to year month and days and returning a string
 def hexDate(bytes3):
     year = bytes3[0] + 2000
     month  = bytes3[1]
@@ -71,6 +77,7 @@ def hexDate(bytes3):
     datestring = str(month) + '/' + str(day) + '/' + str(year) 
     return(datestring)
 
+#make sure this is a two digit string for a date
 def addZero(num):
     if num<10:
         time = '0'+str(num)
@@ -78,6 +85,7 @@ def addZero(num):
         time = str(num)
     return time
 
+#convert three bytes to a time value
 def hexTime(bytes3):
     hours = bytes3[0]
     minutes = bytes3[1]
@@ -86,33 +94,41 @@ def hexTime(bytes3):
     timestring = addZero(hours) + ':' + addZero(minutes) + ':' + addZero(seconds)
     return timestring
 
+#get power setting
 def hexPower(bytes1):
     if bytes1 == b'\x00':
         return "on"
     else:
         return "off"
 
+#get flow in milliliters per minute by converting hex to integer and multiplying by 25
 def hexFlow(bytes1):
     flow = hexStringToInt(bytes1)*25
     return str(flow) + 'mlpm'
 
+#other option is to convert two bytes to aninteger
 def hexFlow2(bytes2):
     return int.from_bytes(bytes2,"little")
 
+#get PCB temperature by converting byte to string
 def hexPCBTemp(bytes1):
     return str(bytes1) + 'C'
 
+#get reference number (three bytes)
 def hexReference(bytes3):
     num = int.from_bytes(bytes3,"little")
     return(num)
 
+#get status
 def hexStatus(bytes1):
     return str(bytes1)
 
+#get two byte battery percent
 def hexBattery(bytes2):
     battery = int.from_bytes(bytes2,'little')
     return str(battery) + "%"
 
+#convert long string of characters from a streaming output to a dictionary
 def streamToDict(stream):
     if stream[2:8] == b'AE5X:M'  and len(stream) > 20:
         print(stream)
@@ -137,6 +153,7 @@ def streamToDict(stream):
 def flush():
     aeth_ser.flush()
         
+#get the check sum value from a string of characters
 def getCheckSum(data):
     length = len(data)
     checksum = length ^ data[0]
@@ -144,12 +161,14 @@ def getCheckSum(data):
         checksum = checksum ^ byte
     return checksum
 
+#write to the AE51 serial starting with the 2 byte, then the one byte length of the data, then the data, then the one byte checksum, then the closing 3 byte.
 def write(data):
     checkSum = getCheckSum(data).to_bytes(1,'big')
     length = len(data).to_bytes(1,'big')
     message = b"\x02" +length+ data + checkSum + b"\x03"
     aeth_ser.write(message)
 
+#read serial data from the AE51 over a half a second period. 
 def getResponse():
     for i in range(5):
         data = aeth_ser.read()
@@ -162,6 +181,7 @@ def getResponse():
           
 #openAethPort("COM6", 500000)
 
+#get the date
 def getDate():
     write(b"AE5X:D")
     reply = getResponse()
